@@ -1,6 +1,12 @@
 name: CI
 
 on:
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - '*.yaml'
+  #     - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - '*.yaml'
@@ -9,7 +15,7 @@ on:
     - cron: '0 0 * * *'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -22,16 +28,13 @@ jobs:
       matrix:
         #### Modify below here to match your project ####
         file:
-          - project-template-esp32
-          - project-template-esp32-c3
-          - project-template-esp32-c6
-          - project-template-esp32-s3
+          - cwa-weather-panel-esp32-s3
         #### Modify above here to match your project ####
 
         esphome-version:
           - stable
-          - beta
-          - dev
+          # - beta
+          # - dev
     steps:
       - name: Checkout source code
         uses: actions/checkout@v5

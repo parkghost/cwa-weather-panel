@@ -1,13 +1,23 @@
-# ESPHome Project Template
+# CWA Weather Panel
 
-This repo serves as a template for creating a new ESPHome project.
+A weather display panel powered by ESPHome that shows Taiwan Central Weather Administration (CWA) town-level weather forecasts on an E-Paper display.
 
-It includes a GitHub workflow that will automatically build the configuration(s) and then deploys a simple 
-website via GitHub pages that utilises [ESP Web Tools](https://esphome.github.io/esp-web-tools/) for users to 
-easily install your project onto their device.
+## Quick Installation
 
-## Instructions
+Visit the [project website](https://parkghost.github.io/cwa-weather-panel/) to install the firmware directly to your device via USB using ESP Web Tools.
 
-1. Use this repo template to [generate](https://github.com/esphome/esphome-project-template/generate) your own repository.
-2. Clone your new repository.
-3. Follow the checklist created as an issue in your new repository.
+## Configuration
+
+After installation, configure your device with:
+- WiFi credentials
+- CWA API key (obtain from [CWA](https://opendata.cwa.gov.tw/))
+- Your city and town name for weather forecasts
+
+## Manual Build
+
+1. Clone this repository
+2. Copy `templates/secrets.yaml` to `secrets.yaml` and fill in your credentials
+3. Build and upload using ESPHome:
+   ```bash
+   esphome run cwa-weather-panel-esp32-s3.factory.yaml
+   ```

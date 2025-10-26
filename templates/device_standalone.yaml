@@ -1,0 +1,72 @@
+substitutions:
+  timezone: Asia/Taipei
+
+esphome:
+  name: $device_name
+  friendly_name: $friendly_name
+
+logger:
+  level: DEBUG
+  # baud_rate: 0
+
+wifi:
+  id: wifi_id
+
+  ap:
+    ssid: "$friendly_name"
+    password: !secret wifi_ap_password
+
+web_server:
+  version: 3
+  port: 80
+
+captive_portal:
+  id: captive_portal_id
+
+time:
+  - platform: sntp
+    id: esp_time
+    timezone: $timezone
+    servers:
+      - time1.google.com
+      - time2.google.com
+      - time3.google.com
+
+api:
+  reboot_timeout: 0s
+
+ota:
+  - platform: esphome
+  - platform: web_server
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+
+text_sensor:
+  - platform: version
+    name: "ESPHome Version"
+
+  - platform: uptime
+    name: Uptime
+
+  - platform: wifi_info
+    ip_address:
+      id: wifi_ip
+      name: WiFi IP
+    ssid:
+      id: wifi_ssid
+      name: WiFi SSID
+    mac_address:
+      name: WiFi Mac Address
+    dns_address:
+      name: WiFi DNS Address
+
+button:
+  - platform: restart
+    name: "Restart"
+    id: restart_btn
+
+  - platform: factory_reset
+    id: factory_reset_btn
+    name: "Factory Reset"
