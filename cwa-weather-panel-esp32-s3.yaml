@@ -2,7 +2,7 @@ substitutions:
   device_name: cwa-weather-panel
   friendly_name: CWA Weather Panel
   project_website: https://github.com/parkghost/cwa-weather-panel
-  firmware_manifest_url: https://github.com/parkghost/cwa-weather-panel/releases/latest/download/cwa-weather-panel.manifest.json
+  firmware_manifest_url: https://parkghost.github.io/cwa-weather-panel/firmware/cwa-weather-panel.manifest.json
   timezone: Asia/Taipei
   wifi_ap_password: !secret wifi_ap_password
   display_model: depg0420
