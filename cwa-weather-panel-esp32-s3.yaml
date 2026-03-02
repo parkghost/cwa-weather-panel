@@ -115,7 +115,7 @@ time:
 cwa_town_forecast:
   - id: town_forecast_3d
     api_key: !lambda return id(forecast_api_key).state;
-    city_name: !lambda return id(city_name).state;
+    city_name: !lambda return id(city_name).current_option().str();
     town_name: !lambda return id(town_name).state;
     mode: 3-DAYS
     time_to: 1d
@@ -126,7 +126,7 @@ cwa_town_forecast:
 
   - id: town_forecast_7d
     api_key: !lambda return id(forecast_api_key).state;
-    city_name: !lambda return id(city_name).state;
+    city_name: !lambda return id(city_name).current_option().str();
     town_name: !lambda return id(town_name).state;
     mode: 7-DAYS
     weather_elements:
@@ -141,7 +141,7 @@ script:
     then:
       - lambda: |-
           // Validate that all required fields are filled
-          if (id(city_name).state.empty()) {
+          if (id(city_name).current_option().empty()) {
             ESP_LOGW("validate", "City name is empty, skipping forecast update");
             return;
           }
@@ -174,7 +174,7 @@ script:
           - wifi.connected:
         then:
           - lambda: |-
-              if (!id(city_name).state.empty() &&
+              if (!id(city_name).current_option().empty() &&
                   !id(forecast_api_key).state.empty() &&
                   !id(town_name).state.empty()) {
                 id(town_forecast_3d).update();
@@ -374,6 +374,7 @@ button:
 
 http_request:
   verify_ssl: false
+  buffer_size_rx: 4096
 
 ota:
   - platform: http_request
@@ -624,7 +625,9 @@ display:
         // Display IP address
         auto ip_addresses = id(wifi_id).get_ip_addresses();
         if (!ip_addresses.empty() && ip_addresses[0].is_set()) {
-          it.printf(width / 2, y_pos, id(font_24), BLACK, TextAlign::TOP_CENTER, "http://%s", ip_addresses[0].str().c_str());
+          char ip_buf[40];
+          ip_addresses[0].str_to(ip_buf);
+          it.printf(width / 2, y_pos, id(font_24), BLACK, TextAlign::TOP_CENTER, "http://%s", ip_buf);
           y_pos += 40;
         }
 
@@ -752,7 +755,7 @@ display:
       top_offset = 200;
       it.line(0, top_offset, width, top_offset, BLACK);
 
-      std::string mode = id(forecast_mode).state;
+      std::string mode = id(forecast_mode).current_option().str();
       if (mode == "7-Day Forecast") {
         // 7-day forecast mode
         int days = 7;
