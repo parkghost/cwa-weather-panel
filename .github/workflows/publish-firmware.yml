@@ -15,7 +15,7 @@ jobs:
       #### Modify below here to match your project ####
       files: |
         cwa-weather-panel-esp32-s3.factory.yaml
-      esphome-version: 2026.5.1
+      esphome-version: 2026.6.5
       combined-name: cwa-weather-panel
       #### Modify above here to match your project ####
 
