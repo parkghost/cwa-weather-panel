@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CWA Weather Panel — 電子紙天氣面板</title>
+<meta name="description" content="以 ESPHome 打造的 4.2 吋三色電子紙天氣面板，常駐顯示中央氣象署鄉鎮天氣預報。">
+<script>
+  if (location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    location.replace('https://' + location.host + location.pathname + location.search);
+  }
+</script>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F6F4EE;
+    --card: #FFFFFF;
+    --ink: #201D18;
+    --ink-soft: #6B645A;
+    --seal: #C3272B;
+    --seal-deep: #9C1E22;
+    --line: #E3DED2;
+    --epd-white: #F4F2EB;
+    --font-display: "LXGW WenKai TC", "Noto Serif TC", serif;
+    --font-body: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--seal); text-underline-offset: 3px; }
+  a:hover { color: var(--seal-deep); }
+
+  :focus-visible {
+    outline: 2px solid var(--seal);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ===== Top nav ===== */
+  .topnav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(246, 244, 238, 0.9);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .nav-inner {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    height: 52px;
+  }
+
+  .nav-brand {
+    font-family: var(--font-display);
+    font-size: 17px;
+    white-space: nowrap;
+  }
+
+  .nav-brand .seal-dot {
+    display: inline-block;
+    width: 9px; height: 9px;
+    background: var(--seal);
+    border-radius: 2px;
+    margin-right: 8px;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+
+  .nav-links a {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    white-space: nowrap;
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-links a.active { color: var(--seal); font-weight: 500; }
+
+  section { scroll-margin-top: 68px; }
+
+  /* ===== Hero ===== */
+  .hero { border-bottom: 1px solid var(--line); }
+
+  .hero-inner {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 48px;
+    align-items: center;
+    padding: 60px 24px 52px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: var(--seal);
+    text-transform: uppercase;
+    margin: 0 0 12px;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(36px, 6vw, 52px);
+    line-height: 1.2;
+    margin: 0 0 16px;
+    letter-spacing: 0.04em;
+  }
+
+  .hero p.lede {
+    margin: 0 0 28px;
+    max-width: 25em;
+    color: var(--ink-soft);
+  }
+
+  .btn-row { display: flex; gap: 12px; flex-wrap: wrap; }
+
+  .btn {
+    display: inline-block;
+    font-family: var(--font-body);
+    font-weight: 500;
+    font-size: 15px;
+    line-height: 1;
+    padding: 14px 22px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .btn-primary { background: var(--ink); color: var(--paper); }
+  .btn-primary:hover { background: #000; color: #fff; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink);
+    border-color: var(--line);
+  }
+  .btn-ghost:hover { border-color: var(--ink-soft); }
+
+  /* ===== E-paper device mockup ===== */
+  .device {
+    background: #FDFDFC;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    padding: 20px;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,0.7),
+      0 20px 44px -20px rgba(32, 29, 24, 0.35);
+  }
+
+  .device-bezel {
+    background: #EAE7DF;
+    border-radius: 8px;
+    padding: 10px;
+  }
+
+  .device canvas {
+    display: block;
+    width: 340px;
+    max-width: 100%;
+    background: var(--epd-white);
+    cursor: pointer;
+  }
+
+  .device-hint {
+    font-size: 13px;
+    color: var(--ink-soft);
+    text-align: center;
+    max-width: 340px;
+    line-height: 1.6;
+    margin: 12px auto 0;
+  }
+
+  /* ===== Sections ===== */
+  section { padding: 56px 0 8px; }
+
+  .sec-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: var(--seal);
+    text-transform: uppercase;
+    margin: 0 0 6px;
+  }
+
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 32px;
+    margin: 0 0 20px;
+    letter-spacing: 0.04em;
+  }
+
+  h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 32px 0 10px;
+  }
+
+  ul, ol { padding-left: 1.5em; margin: 0.4em 0 1em; }
+  li { margin: 0.25em 0; }
+
+  .note { font-size: 14px; color: var(--ink-soft); }
+
+  code.chip {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 0.1em 0.45em;
+    white-space: nowrap;
+  }
+
+  pre {
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    background: var(--ink);
+    color: #EFEBE2;
+    border-radius: 10px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    line-height: 1.6;
+  }
+  pre code { font-family: inherit; }
+
+  /* Screen gallery */
+  .views {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(216px, 1fr));
+    gap: 16px;
+    margin: 24px 0 8px;
+  }
+
+  .view-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+  }
+
+  .view-card canvas {
+    display: block;
+    width: 100%;
+    background: var(--epd-white);
+    border: 1px solid var(--line);
+  }
+
+  .view-card .view-name {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--seal);
+    margin: 10px 0 2px;
+  }
+
+  .view-card .view-desc {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  /* Install steps */
+  .steps { list-style: none; padding: 0; counter-reset: step; }
+
+  .steps > li {
+    counter-increment: step;
+    position: relative;
+    padding: 0 0 26px 56px;
+    margin: 0;
+  }
+
+  .steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 0;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--seal);
+  }
+
+  .steps > li:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    left: 17px; top: 40px; bottom: 2px;
+    width: 1px;
+    background: var(--line);
+  }
+
+  .steps .step-title { font-weight: 700; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 24px;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  dl.spec { margin: 0; }
+  dl.spec dt {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-top: 12px;
+  }
+  dl.spec dt:first-child { margin-top: 0; }
+  dl.spec dd { margin: 2px 0 0; }
+
+  .install-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 16px 0;
+  }
+
+  esp-web-install-button span[slot] { color: var(--seal-deep); font-size: 14px; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    margin-top: 64px;
+    padding: 28px 0 44px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-soft);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  @media (max-width: 760px) {
+    .hero-inner { grid-template-columns: 1fr; padding: 44px 24px 40px; }
+    .device { justify-self: center; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .nav-brand { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="topnav" aria-label="頁面導覽">
+  <div class="wrap nav-inner">
+    <span class="nav-brand"><span class="seal-dot" aria-hidden="true"></span>電子紙天氣面板</span>
+    <div class="nav-links">
+      <a href="#intro">產品介紹</a>
+      <a href="#quickstart">快速設定</a>
+      <a href="#usage">日常使用</a>
+      <a href="#spec">資料與規格</a>
+      <a href="#install">安裝與編譯</a>
+      <a href="#trouble">疑難排解</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap hero-inner">
+    <div>
+      <p class="eyebrow">ESP32-S3 · 4.2˝ 三色電子紙 · 台灣在地資料</p>
+      <h1>電子紙天氣面板</h1>
+      <p class="lede">一塊 4.2 吋黑・白・紅三色電子紙，常駐顯示中央氣象署的鄉鎮天氣預報。每 3 小時抓一次資料，其餘時間不發光、不耗電，安靜得像牆上的一張紙。</p>
+      <div class="btn-row">
+        <a class="btn btn-primary" href="#install">安裝韌體</a>
+        <a class="btn btn-ghost" href="#quickstart">快速設定</a>
+      </div>
+    </div>
+    <div>
+      <div class="device">
+        <div class="device-bezel">
+          <canvas id="epd" width="800" height="600" role="img" aria-label="電子紙畫面模擬：日期、今日天氣與未來 18 小時預報"></canvas>
+        </div>
+      </div>
+      <p class="device-hint">點一下畫面切換 18 小時／7 天預報，與實機的 <code class="chip">Forecast - Mode</code> 相同——切換時的黑白閃爍正是電子紙的更新方式</p>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section id="intro">
+  <p class="sec-eyebrow">Overview</p>
+  <h2>產品介紹</h2>
+  <p>這是一台以 <a href="https://esphome.io/" target="_blank" rel="noopener">ESPHome</a> 打造的壁掛／桌上型天氣面板：每 3 小時抓取中央氣象署「鄉鎮天氣預報」開放資料，上半部顯示今天的日期、天氣圖示、溫度範圍、降雨機率與天氣描述，下半部可在「未來 18 小時（逐 3 小時）」與「未來 7 天」兩種預報之間切換。雨天與雷雨等需要留意的天氣，會以紅色墨水標示。</p>
+
+  <div class="views">
+    <div class="view-card">
+      <canvas id="v-7day" width="800" height="600" role="img" aria-label="7 天預報模式畫面模擬"></canvas>
+      <p class="view-name">7-Day Forecast</p>
+      <p class="view-desc">下半部顯示未來一週：星期、天氣圖示與當日溫度範圍</p>
+    </div>
+    <div class="view-card">
+      <canvas id="v-setup" width="800" height="600" role="img" aria-label="需要設定畫面模擬"></canvas>
+      <p class="view-name">需要設定</p>
+      <p class="view-desc">API 金鑰或地點未填時，畫面列出缺漏項目與設備網頁網址</p>
+    </div>
+    <div class="view-card">
+      <canvas id="v-ota" width="800" height="600" role="img" aria-label="韌體更新中畫面模擬"></canvas>
+      <p class="view-name">韌體更新中</p>
+      <p class="view-desc">自動或手動更新韌體時顯示，期間請勿關閉電源</p>
+    </div>
+  </div>
+  <p class="note">以上為 400×300 實機畫面的等比模擬。</p>
+</section>
+
+<section id="quickstart">
+  <p class="sec-eyebrow">Quick Start</p>
+  <h2>快速設定</h2>
+  <p>機器已預載韌體。接上電源後，五個步驟完成設定：</p>
+  <ol class="steps">
+    <li>
+      <span class="step-title">接上電源</span><br>
+      使用 USB 5V 充電器與 Type-C 充電線連接面板。
+    </li>
+    <li>
+      <span class="step-title">連上家中 WIFI</span><br>
+      用手機連線設備的 WIFI AP（SSID <code class="chip">CWA Weather Panel</code>，密碼 <code class="chip">12345678</code>），
+      打開 <a href="http://192.168.4.1/" target="_blank" rel="noopener">http://192.168.4.1/</a>，選擇家中 2.4GHz WIFI 並輸入密碼。
+      <p class="note">若是透過本頁「安裝韌體」由瀏覽器燒錄，安裝完成後可依提示直接設定 WIFI，跳過此步驟。</p>
+    </li>
+    <li>
+      <span class="step-title">進入設備網頁</span><br>
+      設定完成前，螢幕會顯示「需要設定」畫面與設備網址（http://設備IP/），用瀏覽器開啟即可。
+    </li>
+    <li>
+      <span class="step-title">申請並填入 API 金鑰</span><br>
+      於<a href="https://opendata.cwa.gov.tw/" target="_blank" rel="noopener">氣象資料開放平臺</a>免費註冊、取得 API 授權碼，填入
+      <code class="chip">Forecast - API Key</code>。
+    </li>
+    <li>
+      <span class="step-title">設定天氣地點</span><br>
+      <code class="chip">Forecast - City Name</code> 選縣市（例：新北市），
+      <code class="chip">Forecast - Town Name</code> 填鄉鎮（例：中和區），
+      名稱以<a href="https://opendata.cwa.gov.tw/opendatadoc/Opendata_City.pdf" target="_blank" rel="noopener">鄉鎮對照表</a>為準。
+      完成後畫面即自動更新為天氣預報。
+    </li>
+  </ol>
+</section>
+
+<section id="usage">
+  <p class="sec-eyebrow">Daily Use</p>
+  <h2>日常使用</h2>
+
+  <h3>預報模式</h3>
+  <ul>
+    <li><code class="chip">Forecast - Mode</code> — 切換 <code class="chip">18-Hour Forecast</code>（未來 18 小時，每 3 小時一欄）與 <code class="chip">7-Day Forecast</code>（未來一週）</li>
+  </ul>
+
+  <h3>資料更新</h3>
+  <ul>
+    <li>每 3 小時整點自動抓取預報並重繪畫面</li>
+    <li>手動更新：<code class="chip">Forecast - Update All</code></li>
+    <li>更新狀態：<code class="chip">3D/7D Last Updated</code>、<code class="chip">Last Success</code>、<code class="chip">Last Error</code></li>
+    <li>電子紙僅在資料更新時重繪；每 10 次局部更新會做一次全螢幕更新以清除殘影</li>
+  </ul>
+
+  <h3>韌體更新</h3>
+  <ul>
+    <li>自動偵測：定時檢查，<code class="chip">Firmware</code> 顯示目前狀態</li>
+    <li>手動偵測：<code class="chip">Firmware - Check</code></li>
+    <li>自動更新：<code class="chip">Firmware - Auto Update</code>（預設開啟）偵測到新版即自動安裝，期間螢幕顯示「韌體更新中」，請勿關閉電源</li>
+    <li>手動更新：關閉自動更新後，以 <code class="chip">Firmware - Perform Update</code> 執行</li>
+  </ul>
+
+  <h3>排程重啟</h3>
+  <ul>
+    <li><code class="chip">Schedule Reboot - Enabled</code> 搭配 <code class="chip">Schedule Reboot - Time</code>（預設 05:00）</li>
+  </ul>
+</section>
+
+<section id="spec">
+  <p class="sec-eyebrow">Data &amp; Hardware</p>
+  <h2>資料與規格</h2>
+
+  <div class="grid-2">
+    <div class="card">
+      <dl class="spec">
+        <dt>資料來源</dt>
+        <dd>中央氣象署「鄉鎮天氣預報」開放資料（F-D0047）：未來 3 天逐 3 小時（天氣現象、降雨機率）＋未來 1 週（天氣現象、最高／最低溫度、12 小時降雨機率）</dd>
+        <dt>API Key</dt>
+        <dd><code class="chip">Forecast - API Key</code> — 於<a href="https://opendata.cwa.gov.tw/" target="_blank" rel="noopener">氣象資料開放平臺</a>自行申請</dd>
+        <dt>地點</dt>
+        <dd><code class="chip">Forecast - City Name</code> 縣市、<code class="chip">Forecast - Town Name</code> 鄉鎮，參考<a href="https://opendata.cwa.gov.tw/opendatadoc/Opendata_City.pdf" target="_blank" rel="noopener">鄉鎮對照表</a></dd>
+      </dl>
+    </div>
+    <div class="card">
+      <dl class="spec">
+        <dt>開發板</dt>
+        <dd><a href="https://www.waveshare.com/wiki/ESP32-S3-Zero" target="_blank" rel="noopener">Waveshare ESP32-S3-Zero</a></dd>
+        <dt>螢幕</dt>
+        <dd>4.2 吋 400×300 電子紙（DEPG0420，黑／白／紅三色，SPI）</dd>
+        <dt>電源</dt>
+        <dd>DC 5V（USB-C）</dd>
+        <dt>網路時間</dt>
+        <dd>SNTP · time[1-3].google.com · Asia/Taipei</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <p class="sec-eyebrow">Install &amp; Build</p>
+  <h2>安裝與編譯</h2>
+
+  <h3>使用瀏覽器 USB 安裝</h3>
+  <div class="install-card">
+    <ol>
+      <li>使用數據線連接設備 USB 與電腦</li>
+      <li>按下方按鈕，選擇設備連接埠（COMx），依提示安裝 — 安裝過程請勿離開頁面</li>
+    </ol>
+    <esp-web-install-button manifest="firmware/cwa-weather-panel.manifest.json">
+      <button slot="activate" class="btn btn-primary">連接設備並安裝<span id="fw-ver-btn"></span></button>
+      <span slot="unsupported">此瀏覽器不支援 Web Serial，請改用桌面版 Chrome 或 Edge</span>
+      <span slot="not-allowed">此頁面需透過 HTTPS 開啟才能安裝</span>
+    </esp-web-install-button>
+    <p class="note">安裝時可選擇是否清除既有設定（Erase device）；安裝完成後可直接於瀏覽器設定 WIFI。</p>
+  </div>
+
+  <h3>使用設備網頁 OTA 安裝</h3>
+  <ol>
+    <li>下載 <a href="firmware/cwa-weather-panel-esp32s3.ota.bin">cwa-weather-panel-esp32s3.ota.bin</a></li>
+    <li>進入設備網頁的 OTA Update，選擇檔案後按 Update</li>
+  </ol>
+
+  <h3>自行編譯</h3>
+  <ol>
+    <li>安裝 <a href="https://esphome.io/guides/getting_started_command_line" target="_blank" rel="noopener">ESPHome CLI</a></li>
+    <li>取得原始碼：
+<pre><code>git clone https://github.com/parkghost/cwa-weather-panel.git
+cd cwa-weather-panel</code></pre>
+    </li>
+    <li>編譯與安裝，下列方式擇一：
+      <ul>
+        <li>USB：<code class="chip">esphome run cwa-weather-panel-esp32-s3.factory.yaml --device COMx</code></li>
+        <li>OTA：<code class="chip">esphome run cwa-weather-panel-esp32-s3.factory.yaml --device 設備IP</code></li>
+        <li>僅編譯：<code class="chip">esphome compile cwa-weather-panel-esp32-s3.factory.yaml</code></li>
+      </ul>
+    </li>
+  </ol>
+</section>
+
+<section id="trouble">
+  <p class="sec-eyebrow">Troubleshooting</p>
+  <h2>疑難排解</h2>
+
+  <h3>螢幕顯示「需要設定」</h3>
+  <p>表示 API 金鑰或地點尚未填寫。畫面會列出缺漏項目與設備網址，開啟網址補齊 <code class="chip">Forecast - API Key</code>、<code class="chip">Forecast - City Name</code>、<code class="chip">Forecast - Town Name</code> 後自動恢復。</p>
+
+  <h3>畫面一直沒有資料</h3>
+  <ul>
+    <li>確認 <code class="chip">Forecast - API Key</code> 為有效金鑰</li>
+    <li>確認地點名稱與官方一致：見<a href="https://opendata.cwa.gov.tw/opendatadoc/Opendata_City.pdf" target="_blank" rel="noopener">鄉鎮對照表</a>（例：臺北市，不是台北市）</li>
+    <li>查看 <code class="chip">3D/7D Last Error</code> 與設備網頁右側日誌</li>
+  </ul>
+
+  <h3>查看設備日誌</h3>
+  <ul>
+    <li>Web Console：進入設備網頁，右側即時資訊</li>
+    <li>ESPHome CLI：<code class="chip">esphome logs cwa-weather-panel-esp32-s3.yaml --device 設備IP</code></li>
+    <li><a href="https://web.esphome.io/" target="_blank" rel="noopener">ESP Web Tool</a>：Connect &gt; 選擇連接埠 &gt; LOGS</li>
+  </ul>
+
+  <h3>回復原廠設定</h3>
+  <p>進入設備網頁，按 <code class="chip">Factory Reset</code> — 會清除 WIFI 與所有設定，回到「需要設定」狀態。</p>
+</section>
+
+<footer>
+  <span>CWA Weather Panel<span id="fw-ver-foot"></span></span>
+  <span>資料來源：中央氣象署 · <a href="https://github.com/parkghost/cwa-weather-panel" target="_blank" rel="noopener">GitHub</a></span>
+</footer>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ===== E-paper renderer: 400x300 logical, drawn at 2x for crispness ===== */
+  var EPD_W = 400, EPD_H = 300;
+  var PAPER = "#F4F2EB", INK = "#26221C", RED = "#C3272B";
+  var FONT = '"Noto Sans TC", sans-serif';
+
+  function ctx2d(id) {
+    var el = document.getElementById(id);
+    if (!el) return null;
+    var ctx = el.getContext("2d");
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
+    return ctx;
+  }
+
+  function clear(ctx) {
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(0, 0, EPD_W, EPD_H);
+  }
+
+  function text(ctx, str, x, y, px, color, align, weight) {
+    ctx.fillStyle = color;
+    ctx.font = (weight || 500) + " " + px + "px " + FONT;
+    ctx.textAlign = align || "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(str, x, y);
+  }
+
+  /* ===== Weather glyphs (outline style, like the Weather Icons font) ===== */
+  function strokeInit(ctx, color, w) {
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = w;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+  }
+
+  function drawSun(ctx, cx, cy, r, color) {
+    strokeInit(ctx, color, Math.max(1.6, r * 0.22));
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.62, 0, Math.PI * 2);
+    ctx.stroke();
+    for (var i = 0; i < 8; i++) {
+      var a = i * Math.PI / 4;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r * 0.95, cy + Math.sin(a) * r * 0.95);
+      ctx.lineTo(cx + Math.cos(a) * r * 1.3, cy + Math.sin(a) * r * 1.3);
+      ctx.stroke();
+    }
+  }
+
+  function cloudPath(ctx, cx, cy, s) {
+    /* cx,cy = center of the cloud base; s = overall width */
+    ctx.beginPath();
+    ctx.arc(cx - s * 0.28, cy - s * 0.02, s * 0.2, Math.PI * 0.42, Math.PI * 1.5);
+    ctx.arc(cx - s * 0.04, cy - s * 0.22, s * 0.24, Math.PI * 1.05, Math.PI * 1.87);
+    ctx.arc(cx + s * 0.26, cy - s * 0.04, s * 0.22, Math.PI * 1.3, Math.PI * 0.5);
+    ctx.closePath();
+  }
+
+  function drawCloud(ctx, cx, cy, s, color) {
+    strokeInit(ctx, color, Math.max(1.6, s * 0.09));
+    /* blank out what's behind (e.g. a sun peeking out) */
+    cloudPath(ctx, cx, cy, s);
+    ctx.save();
+    ctx.fillStyle = PAPER;
+    ctx.fill();
+    ctx.restore();
+    cloudPath(ctx, cx, cy, s);
+    ctx.stroke();
+  }
+
+  function drawMoon(ctx, cx, cy, r, color) {
+    strokeInit(ctx, color, Math.max(1.6, r * 0.22));
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.75, Math.PI * 0.35, Math.PI * 1.75);
+    ctx.arc(cx + r * 0.32, cy - r * 0.32, r * 0.52, Math.PI * 1.6, Math.PI * 0.6, true);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  function drawDrops(ctx, cx, cy, s, color, n) {
+    ctx.fillStyle = color;
+    for (var i = 0; i < n; i++) {
+      var x = cx + (i - (n - 1) / 2) * s * 0.28;
+      var y = cy + (i % 2) * s * 0.14;
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(1.2, s * 0.055), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x - s * 0.05, y + s * 0.16, Math.max(1.2, s * 0.055), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawBolt(ctx, cx, cy, s, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(cx + s * 0.05, cy - s * 0.3);
+    ctx.lineTo(cx - s * 0.16, cy + s * 0.08);
+    ctx.lineTo(cx - s * 0.02, cy + s * 0.08);
+    ctx.lineTo(cx - s * 0.1, cy + s * 0.38);
+    ctx.lineTo(cx + s * 0.18, cy - s * 0.02);
+    ctx.lineTo(cx + s * 0.03, cy - s * 0.02);
+    ctx.lineTo(cx + s * 0.2, cy - s * 0.3);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  /* icon codes: sunny / partly / cloudy / rain / storm-day / night / night-cloudy */
+  function drawIcon(ctx, code, cx, cy, s, color) {
+    switch (code) {
+      case "sunny":
+        drawSun(ctx, cx, cy, s * 0.42, color);
+        break;
+      case "partly":
+        drawSun(ctx, cx + s * 0.22, cy - s * 0.18, s * 0.3, color);
+        drawCloud(ctx, cx - s * 0.06, cy + s * 0.2, s * 0.72, color);
+        break;
+      case "cloudy":
+        drawCloud(ctx, cx, cy + s * 0.08, s * 0.85, color);
+        break;
+      case "rain":
+        drawCloud(ctx, cx, cy - s * 0.02, s * 0.8, color);
+        drawDrops(ctx, cx, cy + s * 0.28, s * 0.8, color, 3);
+        break;
+      case "storm-day":
+        drawSun(ctx, cx + s * 0.3, cy - s * 0.22, s * 0.26, color);
+        drawCloud(ctx, cx - s * 0.04, cy + s * 0.1, s * 0.78, color);
+        drawBolt(ctx, cx - s * 0.16, cy + s * 0.38, s * 0.5, color);
+        drawDrops(ctx, cx + s * 0.16, cy + s * 0.34, s * 0.55, color, 2);
+        break;
+      case "night":
+        drawMoon(ctx, cx, cy, s * 0.42, color);
+        break;
+      case "night-cloudy":
+        drawMoon(ctx, cx + s * 0.2, cy - s * 0.16, s * 0.3, color);
+        drawCloud(ctx, cx - s * 0.06, cy + s * 0.2, s * 0.68, color);
+        break;
+    }
+  }
+
+  function drawSmallDrop(ctx, x, y, color) {
+    /* tiny umbrella-less rain marker used beside the percentages */
+    strokeInit(ctx, color, 1.6);
+    cloudPath(ctx, x, y, 15);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y + 4.5, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawThermometer(ctx, x, y, color) {
+    strokeInit(ctx, color, 2);
+    ctx.beginPath();
+    ctx.moveTo(x, y - 8);
+    ctx.arc(x, y - 8, 3.2, Math.PI, 0);
+    ctx.lineTo(x + 3.2, y + 3);
+    ctx.arc(x, y + 5, 5, -Math.PI * 0.31, Math.PI * 1.31);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y + 5, 2.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* ===== Panel views (mirrors the firmware's display lambda) ===== */
+  function drawTopSection(ctx) {
+    /* left: date block */
+    text(ctx, "七月", 85, 8, 48, RED, "center", 500);
+    text(ctx, "19", 85, 58, 96, RED, "center", 500);
+    text(ctx, "星期日", 85, 162, 30, RED, "center", 500);
+
+    /* right: today's weather */
+    drawIcon(ctx, "storm-day", 275, 70, 120, RED);
+    drawThermometer(ctx, 172, 150, INK);
+    text(ctx, "32-36°C", 184, 140, 22, INK, "left", 500);
+    drawSmallDrop(ctx, 303, 150, INK);
+    text(ctx, "30%", 318, 140, 22, INK, "left", 500);
+    text(ctx, "多雲午後短暫雷陣雨", 275, 170, 21, INK, "center", 500);
+
+    /* divider */
+    ctx.fillStyle = INK;
+    ctx.fillRect(0, 200, EPD_W, 1.4);
+  }
+
+  var HOURS = [
+    { t: "12H", icon: "sunny",     c: INK, pop: "20%" },
+    { t: "15H", icon: "storm-day", c: RED, pop: "30%" },
+    { t: "18H", icon: "rain",      c: RED, pop: "30%" },
+    { t: "21H", icon: "night",     c: INK, pop: "20%" },
+    { t: "00H", icon: "night",     c: INK, pop: "20%" },
+    { t: "03H", icon: "night",     c: INK, pop: "20%" }
+  ];
+
+  var DAYS = [
+    { d: "週日", icon: "storm-day", c: RED, temp: "32·36" },
+    { d: "週一", icon: "partly",    c: INK, temp: "31·36" },
+    { d: "週二", icon: "rain",      c: RED, temp: "30·34" },
+    { d: "週三", icon: "rain",      c: RED, temp: "29·33" },
+    { d: "週四", icon: "cloudy",    c: INK, temp: "29·34" },
+    { d: "週五", icon: "partly",    c: INK, temp: "30·35" },
+    { d: "週六", icon: "sunny",     c: INK, temp: "31·36" }
+  ];
+
+  function viewHourly(ctx) {
+    clear(ctx);
+    drawTopSection(ctx);
+    var cw = EPD_W / 6;
+    HOURS.forEach(function (h, i) {
+      var cx = (i + 0.5) * cw;
+      text(ctx, h.t, cx, 208, 19, INK, "center", 700);
+      drawIcon(ctx, h.icon, cx, 250, 34, h.c);
+      drawSmallDrop(ctx, cx - 18, 281, INK);
+      text(ctx, h.pop, cx - 6, 272, 16, INK, "left", 500);
+    });
+  }
+
+  function viewDaily(ctx) {
+    clear(ctx);
+    drawTopSection(ctx);
+    var cw = EPD_W / 7;
+    DAYS.forEach(function (d, i) {
+      var cx = (i + 0.5) * cw;
+      text(ctx, d.d, cx, 208, 17, INK, "center", 700);
+      drawIcon(ctx, d.icon, cx, 250, 32, d.c);
+      text(ctx, d.temp, cx, 272, 15, INK, "center", 500);
+    });
+  }
+
+  function viewSetup(ctx) {
+    clear(ctx);
+    text(ctx, "需要設定", 200, 22, 38, RED, "center", 700);
+    text(ctx, "請使用以下網址進行設定：", 200, 78, 22, INK, "center", 500);
+    text(ctx, "http://192.168.4.1", 200, 112, 22, INK, "center", 500);
+    text(ctx, "請設定以下項目：", 200, 162, 17, INK, "center", 500);
+    text(ctx, "• 城市名稱 (Forecast - City Name)", 200, 192, 16, RED, "center", 500);
+    text(ctx, "• 鄉鎮名稱 (Forecast - Town Name)", 200, 217, 16, RED, "center", 500);
+    text(ctx, "• 預報 API 金鑰 (Forecast - API Key)", 200, 242, 16, RED, "center", 500);
+  }
+
+  function viewOta(ctx) {
+    clear(ctx);
+    text(ctx, "韌體更新中", 200, 22, 38, RED, "center", 700);
+    text(ctx, "Firmware Update", 200, 84, 22, INK, "center", 500);
+    text(ctx, "請勿關閉電源", 200, 130, 22, INK, "center", 500);
+    text(ctx, "Do not turn off power", 200, 166, 17, INK, "center", 500);
+    text(ctx, "開始時間:", 200, 214, 17, INK, "center", 500);
+    text(ctx, "2026-07-19 13:00:00", 200, 242, 17, INK, "center", 500);
+  }
+
+  /* ===== Render, with an e-paper style refresh flash on mode switch ===== */
+  function renderAll() {
+    var gallery = { "v-7day": viewDaily, "v-setup": viewSetup, "v-ota": viewOta };
+    Object.keys(gallery).forEach(function (id) {
+      var ctx = ctx2d(id);
+      if (ctx) gallery[id](ctx);
+    });
+
+    var hero = document.getElementById("epd");
+    if (!hero) return;
+    var ctx = ctx2d("epd");
+    var modes = [viewHourly, viewDaily];
+    var current = 0;
+    var busy = false;
+
+    var draw = function () { modes[current](ctx); };
+
+    hero.addEventListener("click", function () {
+      if (busy) return;
+      current = (current + 1) % modes.length;
+      if (reducedMotion) { draw(); return; }
+      /* invert flash: the refresh dance every e-paper owner knows */
+      busy = true;
+      var frames = [
+        function () { ctx.fillStyle = INK; ctx.fillRect(0, 0, EPD_W, EPD_H); },
+        function () { clear(ctx); },
+        function () { ctx.fillStyle = INK; ctx.fillRect(0, 0, EPD_W, EPD_H); },
+        function () { clear(ctx); draw(); busy = false; }
+      ];
+      frames.forEach(function (f, i) { setTimeout(f, 110 * (i + 1)); });
+    });
+
+    draw();
+  }
+
+  /* Chinese glyphs are needed on canvas — wait for the webfont subset */
+  var GLYPH_SAMPLE = "七月星期日多雲午後短暫雷陣雨需要設定請使用以下網址進行項目城市鄉鎮名稱預報金鑰韌體更新中請勿關閉電源開始時間週一二三四五六0123456789";
+  if (document.fonts && document.fonts.load) {
+    Promise.all([
+      document.fonts.load('500 22px "Noto Sans TC"', GLYPH_SAMPLE),
+      document.fonts.load('700 22px "Noto Sans TC"', GLYPH_SAMPLE)
+    ]).then(renderAll, renderAll);
+  } else {
+    renderAll();
+  }
+
+  /* ===== Firmware version from the published manifest ===== */
+  fetch("firmware/cwa-weather-panel.manifest.json")
+    .then(function (r) { return r.json(); })
+    .then(function (m) {
+      if (!m.version) return;
+      var foot = document.getElementById("fw-ver-foot");
+      if (foot) foot.textContent = " · Ver " + m.version;
+      var btn = document.getElementById("fw-ver-btn");
+      if (btn) btn.textContent = "（" + m.version + "）";
+    })
+    .catch(function () {});
+
+  /* ===== Scroll spy for the top nav ===== */
+  var links = Array.prototype.slice.call(document.querySelectorAll(".nav-links a"));
+  var byId = {};
+  links.forEach(function (a) { byId[a.getAttribute("href").slice(1)] = a; });
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) {
+        links.forEach(function (a) { a.classList.remove("active"); });
+        var a = byId[e.target.id];
+        if (a) a.classList.add("active");
+      }
+    });
+  }, { rootMargin: "-30% 0px -60% 0px" });
+  links.forEach(function (a) {
+    var sec = document.getElementById(a.getAttribute("href").slice(1));
+    if (sec) observer.observe(sec);
+  });
+})();
+</script>
+
+</body>
+</html>
