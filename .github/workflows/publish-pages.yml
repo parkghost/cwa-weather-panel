@@ -41,11 +41,19 @@ jobs:
           destination: ./output
 
       - name: Fetch firmware files
-        uses: robinraju/release-downloader@v1
-        with:
-          latest: true
-          fileName: '*'
-          out-file-path: output/firmware
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Download from the newest release that actually has assets — the
+        # latest release briefly has none while its firmware is still building
+        run: |
+          tag=$(gh api "repos/${{ github.repository }}/releases" \
+            --jq '[.[] | select(.draft == false and .prerelease == false and (.assets | length) > 0)][0].tag_name')
+          if [ -z "$tag" ]; then
+            echo "No release with assets found" >&2
+            exit 1
+          fi
+          echo "Downloading firmware assets from release $tag"
+          gh release download "$tag" --repo "${{ github.repository }}" --pattern '*' --dir output/firmware
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
